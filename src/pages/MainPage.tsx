@@ -1,0 +1,1 @@
+export const MainPage = () => <div>메인 게시글 목록 화면 (준비 중)</div>;
