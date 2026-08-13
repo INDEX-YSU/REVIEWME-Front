@@ -45,7 +45,7 @@ export const Header = () => {
             letterSpacing: '-0.02em',
           }}
         >
-          INDEX
+          REVIEWME
         </Link>
         <nav style={{ display: 'flex', gap: '20px' }}>
           {NAV_ITEMS.map((item) => (
