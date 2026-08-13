@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { colors, radius, shadow, cardStyle, primaryButtonStyle, inputStyle } from '../styles/theme';
 import { GithubIcon, GoogleIcon } from '../components/OAuthIcons';
+import { getMockAuthorizeUrl } from '../context/oauth';
 
 const oauthButtonStyle = {
   display: 'flex',
@@ -20,6 +21,7 @@ const oauthButtonStyle = {
 };
 
 export const RegisterPage = () => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
@@ -72,11 +74,11 @@ export const RegisterPage = () => {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <button type="button" style={oauthButtonStyle} onClick={() => console.log('GitHub OAuth 가입')}>
+          <button type="button" style={oauthButtonStyle} onClick={() => navigate(getMockAuthorizeUrl('github'))}>
             <GithubIcon />
             GitHub로 계속하기
           </button>
-          <button type="button" style={oauthButtonStyle} onClick={() => console.log('Google OAuth 가입')}>
+          <button type="button" style={oauthButtonStyle} onClick={() => navigate(getMockAuthorizeUrl('google'))}>
             <GoogleIcon />
             Google로 계속하기
           </button>
