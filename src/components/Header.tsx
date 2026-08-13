@@ -1,5 +1,6 @@
 import { NavLink, Link } from 'react-router-dom';
 import { colors, badgeStyle } from '../styles/theme';
+import { useAuth } from '../context/useAuth';
 
 type NavItem = {
   label: string;
@@ -12,12 +13,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: '프로필', to: '/profile' },
 ];
 
-// Mock: 백엔드 연동 전이므로 비로그인(GUEST) 상태를 고정값으로 표시
-const isLoggedIn = false;
-const mockUser = { nickname: '리뷰미', role: 'USER' as const };
-
 export const Header = () => {
-  const role: 'GUEST' | 'USER' = isLoggedIn ? mockUser.role : 'GUEST';
+  const { user, role, logout } = useAuth();
 
   return (
     <header
@@ -68,10 +65,24 @@ export const Header = () => {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <span style={badgeStyle(role === 'USER' ? 'user' : 'guest')}>{role}</span>
-        {isLoggedIn ? (
-          <span style={{ fontSize: '14px', color: colors.textHeading, fontWeight: 600 }}>
-            {mockUser.nickname}
-          </span>
+        {user.isLoggedIn ? (
+          <>
+            <span style={{ fontSize: '14px', color: colors.textHeading, fontWeight: 600 }}>{user.nickname}</span>
+            <button
+              type="button"
+              onClick={logout}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '13px',
+                color: colors.text,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              로그아웃
+            </button>
+          </>
         ) : (
           <>
             <Link

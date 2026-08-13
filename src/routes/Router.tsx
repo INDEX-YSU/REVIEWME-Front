@@ -8,6 +8,7 @@ import { ChatPage } from '../pages/ChatPage';
 import { PostDetailPage } from '../pages/PostDetailPage';
 import { PostCreatePage } from '../pages/PostCreatePage';
 import { PostEditPage } from '../pages/PostEditPage';
+import { OAuthCallbackPage } from '../pages/OAuthCallbackPage';
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +23,8 @@ export const router = createBrowserRouter([
       { path: 'posts/create', element: <PostCreatePage /> },
       { path: 'posts/:id', element: <PostDetailPage /> },
       { path: 'posts/:id/edit', element: <PostEditPage /> },
+      { path: 'auth/callback/github', element: <OAuthCallbackPage provider="github" /> },
+      { path: 'auth/callback/google', element: <OAuthCallbackPage provider="google" /> },
     ],
   },
 ]);

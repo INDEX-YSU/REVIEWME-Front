@@ -1,13 +1,22 @@
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CURRENT_USER_ID, deletePost, getPostById } from '../mocks/posts';
+import { CURRENT_USER_ID, deletePost, getPostById, setPostAiSummary } from '../mocks/posts';
+import { generateAiSummary } from '../mocks/aiSummary';
 import { colors, radius, shadow, cardStyle, secondaryButtonStyle } from '../styles/theme';
 import { MarkdownContent } from '../components/MarkdownContent';
 import { InfoScreen } from '../components/InfoScreen';
+import { Spinner } from '../components/Spinner';
+import { SkeletonLine } from '../components/Skeleton';
+
+type SummaryStatus = 'idle' | 'loading' | 'error';
 
 export const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const post = id ? getPostById(Number(id)) : undefined;
+
+  const [summary, setSummary] = useState<string | null>(post?.aiSummary ?? null);
+  const [summaryStatus, setSummaryStatus] = useState<SummaryStatus>('idle');
 
   if (!post) {
     return (
@@ -26,6 +35,18 @@ export const PostDetailPage = () => {
     if (!window.confirm('정말 삭제하시겠어요? 삭제 후에는 되돌릴 수 없습니다.')) return;
     deletePost(post.id);
     navigate('/');
+  };
+
+  const handleGenerateSummary = async () => {
+    setSummaryStatus('loading');
+    try {
+      const result = await generateAiSummary(post.content);
+      setPostAiSummary(post.id, result);
+      setSummary(result);
+      setSummaryStatus('idle');
+    } catch {
+      setSummaryStatus('error');
+    }
   };
 
   return (
@@ -88,6 +109,66 @@ export const PostDetailPage = () => {
           <span>조회 {post.views.toLocaleString()}</span>
           <span>추천 {post.likes}</span>
           <span>댓글 {post.comments}</span>
+        </div>
+
+        <div
+          style={{
+            marginTop: '20px',
+            padding: '16px',
+            borderRadius: radius.md,
+            border: `1px solid ${colors.accentBorder}`,
+            background: colors.accentBg,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: summaryStatus !== 'idle' || summary ? '10px' : 0,
+            }}
+          >
+            <h3 style={{ fontSize: '14px', color: colors.accent }}>✨ AI 요약</h3>
+            {summaryStatus !== 'loading' && (
+              <button
+                type="button"
+                onClick={handleGenerateSummary}
+                style={{ ...secondaryButtonStyle, fontSize: '12px', padding: '6px 12px' }}
+              >
+                {summary ? '다시 생성' : 'AI 요약 생성'}
+              </button>
+            )}
+          </div>
+
+          {summaryStatus === 'loading' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.text, fontSize: '13px' }}>
+                <Spinner size={16} />
+                AI가 게시글을 요약하고 있어요...
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <SkeletonLine />
+                <SkeletonLine width="85%" />
+                <SkeletonLine width="60%" />
+              </div>
+            </div>
+          )}
+
+          {summaryStatus === 'error' && (
+            <p style={{ color: colors.danger, fontSize: '13px' }}>
+              요약 생성에 실패했습니다. 위 버튼을 눌러 다시 시도해주세요.
+            </p>
+          )}
+
+          {summaryStatus === 'idle' && summary && (
+            <p style={{ color: colors.textHeading, fontSize: '14px', lineHeight: 1.6 }}>{summary}</p>
+          )}
+
+          {summaryStatus === 'idle' && !summary && (
+            <p style={{ color: colors.text, fontSize: '13px' }}>
+              아직 생성된 요약이 없어요. 버튼을 눌러 AI 요약을 생성해보세요.
+            </p>
+          )}
         </div>
 
         <div style={{ paddingTop: '20px' }}>

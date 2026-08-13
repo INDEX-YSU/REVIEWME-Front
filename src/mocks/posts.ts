@@ -14,6 +14,7 @@ export type Post = {
   comments: number;
   views: number;
   hasAiSummary: boolean;
+  aiSummary?: string;
 };
 
 // Mock: 백엔드 연동 전이므로 현재 로그인 사용자를 고정값으로 가정
@@ -51,6 +52,8 @@ const [optimisticComments, addOptimisticComment] = useOptimistic(
     comments: 11,
     views: 512,
     hasAiSummary: true,
+    aiSummary:
+      'useOptimistic 훅으로 서버 응답 전에 UI를 먼저 업데이트해 체감 속도를 개선한 사례입니다. 실패 시 롤백 처리까지 함께 구현했습니다.',
   },
   {
     id: 2,
@@ -75,6 +78,8 @@ const [optimisticComments, addOptimisticComment] = useOptimistic(
     comments: 34,
     views: 2310,
     hasAiSummary: true,
+    aiSummary:
+      '신입 프론트엔드 개발자가 문제 해결 과정 중심으로 포트폴리오를 정리한 경험담입니다. 실제 면접에서 받은 질문 예시도 함께 소개합니다.',
   },
   {
     id: 3,
@@ -140,6 +145,8 @@ Chunk 크기를 500에서 100으로 줄이고 나서야 데드락이 사라졌�
     comments: 47,
     views: 4120,
     hasAiSummary: true,
+    aiSummary:
+      'Claude API 기반 코드 리뷰 봇을 3개월간 운영한 회고입니다. 프롬프트 설계보다 컨텍스트 관리가 리뷰 품질에 더 큰 영향을 미쳤다고 강조합니다.',
   },
   {
     id: 6,
@@ -259,6 +266,13 @@ export const updatePost = (id: number, input: PostInput): Post | undefined => {
 export const deletePost = (id: number): void => {
   const index = posts.findIndex((post) => post.id === id);
   if (index !== -1) posts.splice(index, 1);
+};
+
+export const setPostAiSummary = (id: number, summary: string): void => {
+  const target = posts.find((post) => post.id === id);
+  if (!target) return;
+  target.aiSummary = summary;
+  target.hasAiSummary = true;
 };
 
 export const getExcerpt = (content: string, maxLength = 90): string => {

@@ -1,6 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/useAuth';
+import { getMockAuthorizeUrl } from '../context/oauth';
 import { colors, radius, shadow, cardStyle, primaryButtonStyle, secondaryButtonStyle, badgeStyle } from '../styles/theme';
-import { GithubIcon } from '../components/OAuthIcons';
+import { GithubIcon, GoogleIcon } from '../components/OAuthIcons';
+import { InfoScreen } from '../components/InfoScreen';
+import { ProfileEditModal } from '../components/ProfileEditModal';
 
 type Repo = {
   id: number;
@@ -9,13 +14,6 @@ type Repo = {
   language: string;
   stars: number;
   url: string;
-};
-
-const MOCK_PROFILE = {
-  nickname: '리뷰미',
-  email: 'ysmin0530@gmail.com',
-  role: 'USER' as const,
-  githubUsername: 'reviewme-dev',
 };
 
 const MOCK_REPOS: Repo[] = [
@@ -60,70 +58,171 @@ const LANGUAGE_COLORS: Record<string, string> = {
   JavaScript: '#f1e05a',
 };
 
+const connectionBadgeStyle = (connected: boolean): React.CSSProperties => ({
+  fontSize: '12px',
+  fontWeight: 600,
+  color: connected ? colors.success : colors.text,
+  background: connected ? colors.successBg : colors.bgSubtle,
+  border: `1px solid ${connected ? colors.success : colors.border}`,
+  borderRadius: radius.pill,
+  padding: '2px 10px',
+});
+
 export const ProfilePage = () => {
-  const [isGithubConnected, setIsGithubConnected] = useState(true);
+  const navigate = useNavigate();
+  const { user, role, disconnectProvider, updateProfile } = useAuth();
+  const [isEditOpen, setIsEditOpen] = useState(false);
+
+  if (!user.isLoggedIn) {
+    return (
+      <InfoScreen
+        title="로그인이 필요합니다"
+        description="프로필을 확인하려면 먼저 로그인해주세요."
+        actionLabel="로그인하러 가기"
+        actionTo="/login"
+      />
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <section style={{ ...cardStyle, boxShadow: shadow, display: 'flex', gap: '20px', alignItems: 'center' }}>
-        <div
-          style={{
-            width: '72px',
-            height: '72px',
-            borderRadius: radius.lg,
-            background: colors.accentBg,
-            color: colors.accent,
-            border: `1px solid ${colors.accentBorder}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '28px',
-            fontWeight: 700,
-            flexShrink: 0,
-          }}
-        >
-          {MOCK_PROFILE.nickname.charAt(0)}
-        </div>
+        {user.profileImage ? (
+          <img
+            src={user.profileImage}
+            alt={user.nickname}
+            style={{ width: '72px', height: '72px', borderRadius: radius.lg, objectFit: 'cover', flexShrink: 0 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: radius.lg,
+              background: colors.accentBg,
+              color: colors.accent,
+              border: `1px solid ${colors.accentBorder}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '28px',
+              fontWeight: 700,
+              flexShrink: 0,
+            }}
+          >
+            {user.nickname.charAt(0)}
+          </div>
+        )}
 
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-            <h2 style={{ fontSize: '20px' }}>{MOCK_PROFILE.nickname}</h2>
-            <span style={badgeStyle(MOCK_PROFILE.role === 'USER' ? 'user' : 'guest')}>{MOCK_PROFILE.role}</span>
+            <h2 style={{ fontSize: '20px' }}>{user.nickname}</h2>
+            <span style={badgeStyle(role === 'USER' ? 'user' : 'guest')}>{role}</span>
           </div>
-          <p style={{ color: colors.text, fontSize: '14px' }}>{MOCK_PROFILE.email}</p>
+          <p style={{ color: colors.text, fontSize: '14px' }}>{user.email}</p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsGithubConnected((prev) => !prev)}
-          style={isGithubConnected ? secondaryButtonStyle : primaryButtonStyle}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <GithubIcon />
-            {isGithubConnected ? 'GitHub 연동 해제' : 'GitHub 연동하기'}
-          </span>
+        <button type="button" onClick={() => setIsEditOpen(true)} style={secondaryButtonStyle}>
+          프로필 수정
         </button>
       </section>
 
-      <section>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <h3 style={{ fontSize: '16px' }}>GitHub 연동 상태</h3>
-          <span
-            style={{
-              fontSize: '12px',
-              fontWeight: 600,
-              color: isGithubConnected ? colors.success : colors.text,
-              background: isGithubConnected ? colors.successBg : colors.bgSubtle,
-              border: `1px solid ${isGithubConnected ? colors.success : colors.border}`,
-              borderRadius: radius.pill,
-              padding: '2px 10px',
-            }}
-          >
-            {isGithubConnected ? `연동됨 · @${MOCK_PROFILE.githubUsername}` : '미연동'}
-          </span>
+      <section style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div>
+          <p style={{ fontSize: '12px', fontWeight: 600, color: colors.text, marginBottom: '6px' }}>자기소개</p>
+          <p style={{ fontSize: '14px', color: colors.textHeading, lineHeight: 1.6 }}>
+            {user.bio || '아직 작성된 자기소개가 없어요.'}
+          </p>
+        </div>
+        <div>
+          <p style={{ fontSize: '12px', fontWeight: 600, color: colors.text, marginBottom: '6px' }}>소속</p>
+          <p style={{ fontSize: '14px', color: colors.textHeading }}>{user.affiliation || '미입력'}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: '12px', fontWeight: 600, color: colors.text, marginBottom: '6px' }}>사용 언어</p>
+          {user.techStack.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {user.techStack.map((tech) => (
+                <span
+                  key={tech}
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: colors.accent,
+                    background: colors.accentBg,
+                    border: `1px solid ${colors.accentBorder}`,
+                    borderRadius: radius.pill,
+                    padding: '2px 10px',
+                  }}
+                >
+                  {tech}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: '14px', color: colors.textHeading }}>미입력</p>
+          )}
+        </div>
+      </section>
+
+      <section style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <h3 style={{ fontSize: '15px' }}>연동 계정</h3>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <GithubIcon />
+            <div>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: colors.textHeading }}>GitHub</p>
+              <span style={connectionBadgeStyle(user.githubConnected)}>
+                {user.githubConnected ? `연동됨 · @${user.githubUsername}` : '미연동'}
+              </span>
+            </div>
+          </div>
+          {user.githubConnected ? (
+            <button type="button" onClick={() => disconnectProvider('github')} style={secondaryButtonStyle}>
+              연동 해제
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate(getMockAuthorizeUrl('github'))}
+              style={primaryButtonStyle}
+            >
+              연동하기
+            </button>
+          )}
         </div>
 
-        {isGithubConnected ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <GoogleIcon />
+            <div>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: colors.textHeading }}>Google</p>
+              <span style={connectionBadgeStyle(user.googleConnected)}>
+                {user.googleConnected ? `연동됨 · ${user.googleEmail}` : '미연동'}
+              </span>
+            </div>
+          </div>
+          {user.googleConnected ? (
+            <button type="button" onClick={() => disconnectProvider('google')} style={secondaryButtonStyle}>
+              연동 해제
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate(getMockAuthorizeUrl('google'))}
+              style={primaryButtonStyle}
+            >
+              연동하기
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h3 style={{ fontSize: '16px', marginBottom: '12px' }}>GitHub Public Repository</h3>
+
+        {user.githubConnected ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
             {MOCK_REPOS.map((repo) => (
               <a
@@ -157,10 +256,14 @@ export const ProfilePage = () => {
           </div>
         ) : (
           <div style={{ ...cardStyle, textAlign: 'center', color: colors.text, fontSize: '14px' }}>
-            GitHub 계정을 연동하면 Public Repository 목록을 확인할 수 있어요.
+            GitHub 계정을 연동하면 Public Repository 목록을 불러올 수 있습니다.
           </div>
         )}
       </section>
+
+      {isEditOpen && (
+        <ProfileEditModal user={user} onClose={() => setIsEditOpen(false)} onSave={updateProfile} />
+      )}
     </div>
   );
 };
