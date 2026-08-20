@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getExcerpt, getPosts } from '../mocks/posts';
 import { colors, radius, cardStyle, inputStyle, primaryButtonStyle } from '../styles/theme';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonLine } from '../components/Skeleton';
+import { useMockLoading } from '../hooks/useMockLoading';
 
 const SORT_OPTIONS = [
   { key: 'latest', label: '최신순' },
@@ -14,6 +17,7 @@ type SortKey = (typeof SORT_OPTIONS)[number]['key'];
 const PAGE_SIZE = 5;
 
 export const MainPage = () => {
+  const isLoading = useMockLoading(500);
   const [keyword, setKeyword] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('latest');
   const [page, setPage] = useState(1);
@@ -81,7 +85,19 @@ export const MainPage = () => {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {pagedPosts.map((post) => (
+        {isLoading &&
+          Array.from({ length: 3 }, (_, i) => (
+            <div key={i} style={cardStyle}>
+              <SkeletonLine width="70%" />
+              <div style={{ height: '10px' }} />
+              <SkeletonLine width="95%" />
+              <div style={{ height: '6px' }} />
+              <SkeletonLine width="40%" />
+            </div>
+          ))}
+
+        {!isLoading &&
+          pagedPosts.map((post) => (
           <Link key={post.id} to={`/posts/${post.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
             <article style={cardStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
@@ -140,12 +156,16 @@ export const MainPage = () => {
           </Link>
         ))}
 
-        {pagedPosts.length === 0 && (
-          <p style={{ textAlign: 'center', color: colors.text, padding: '40px 0' }}>검색 결과가 없습니다.</p>
+        {!isLoading && pagedPosts.length === 0 && (
+          <EmptyState
+            icon="🔍"
+            title="검색 결과가 없어요"
+            description={keyword ? `'${keyword}'에 대한 게시글을 찾을 수 없어요.` : '아직 등록된 게시글이 없어요.'}
+          />
         )}
       </div>
 
-      {posts.length > 0 && (
+      {!isLoading && posts.length > 0 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginTop: '28px' }}>
           <button
             type="button"

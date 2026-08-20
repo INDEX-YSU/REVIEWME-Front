@@ -6,6 +6,9 @@ import { colors, radius, shadow, cardStyle, primaryButtonStyle, secondaryButtonS
 import { GithubIcon, GoogleIcon } from '../components/OAuthIcons';
 import { InfoScreen } from '../components/InfoScreen';
 import { ProfileEditModal } from '../components/ProfileEditModal';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonLine } from '../components/Skeleton';
+import { useMockLoading } from '../hooks/useMockLoading';
 
 type Repo = {
   id: number;
@@ -72,6 +75,7 @@ export const ProfilePage = () => {
   const navigate = useNavigate();
   const { user, role, disconnectProvider, updateProfile } = useAuth();
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const isRepoLoading = useMockLoading(600);
 
   if (!user.isLoggedIn) {
     return (
@@ -222,7 +226,21 @@ export const ProfilePage = () => {
       <section>
         <h3 style={{ fontSize: '16px', marginBottom: '12px' }}>GitHub Public Repository</h3>
 
-        {user.githubConnected ? (
+        {user.githubConnected && isRepoLoading && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} style={cardStyle}>
+                <SkeletonLine width="60%" />
+                <div style={{ height: '10px' }} />
+                <SkeletonLine width="90%" />
+                <div style={{ height: '10px' }} />
+                <SkeletonLine width="30%" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {user.githubConnected && !isRepoLoading && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
             {MOCK_REPOS.map((repo) => (
               <a
@@ -254,10 +272,14 @@ export const ProfilePage = () => {
               </a>
             ))}
           </div>
-        ) : (
-          <div style={{ ...cardStyle, textAlign: 'center', color: colors.text, fontSize: '14px' }}>
-            GitHub 계정을 연동하면 Public Repository 목록을 불러올 수 있습니다.
-          </div>
+        )}
+
+        {!user.githubConnected && (
+          <EmptyState
+            icon="📦"
+            title="연동된 GitHub 계정이 없어요"
+            description="GitHub 계정을 연동하면 Public Repository 목록을 불러올 수 있습니다."
+          />
         )}
       </section>
 

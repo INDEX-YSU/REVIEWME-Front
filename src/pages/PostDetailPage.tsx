@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CURRENT_USER_ID, deletePost, getPostById, setPostAiSummary } from '../mocks/posts';
+import { CURRENT_USER_ID, deletePost, getPostById, setPostAiSummary, toggleLike } from '../mocks/posts';
 import { generateAiSummary } from '../mocks/aiSummary';
 import { colors, radius, shadow, cardStyle, secondaryButtonStyle } from '../styles/theme';
 import { MarkdownContent } from '../components/MarkdownContent';
 import { InfoScreen } from '../components/InfoScreen';
 import { Spinner } from '../components/Spinner';
 import { SkeletonLine } from '../components/Skeleton';
+import { CommentSection } from '../components/CommentSection';
 
 type SummaryStatus = 'idle' | 'loading' | 'error';
 
@@ -17,6 +18,8 @@ export const PostDetailPage = () => {
 
   const [summary, setSummary] = useState<string | null>(post?.aiSummary ?? null);
   const [summaryStatus, setSummaryStatus] = useState<SummaryStatus>('idle');
+  const [likeState, setLikeState] = useState({ likes: post?.likes ?? 0, likedByMe: post?.likedByMe ?? false });
+  const [commentCount, setCommentCount] = useState(post?.comments ?? 0);
 
   if (!post) {
     return (
@@ -47,6 +50,11 @@ export const PostDetailPage = () => {
     } catch {
       setSummaryStatus('error');
     }
+  };
+
+  const handleToggleLike = () => {
+    const updated = toggleLike(post.id);
+    if (updated) setLikeState({ likes: updated.likes, likedByMe: updated.likedByMe ?? false });
   };
 
   return (
@@ -107,9 +115,30 @@ export const PostDetailPage = () => {
           <span>{post.author}</span>
           <span>{post.createdAt}</span>
           <span>조회 {post.views.toLocaleString()}</span>
-          <span>추천 {post.likes}</span>
-          <span>댓글 {post.comments}</span>
+          <span>추천 {likeState.likes}</span>
+          <span>댓글 {commentCount}</span>
         </div>
+
+        <button
+          type="button"
+          onClick={handleToggleLike}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginTop: '16px',
+            padding: '8px 16px',
+            borderRadius: radius.pill,
+            border: `1px solid ${likeState.likedByMe ? colors.accentBorder : colors.border}`,
+            background: likeState.likedByMe ? colors.accentBg : colors.bg,
+            color: likeState.likedByMe ? colors.accent : colors.text,
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          {likeState.likedByMe ? '👍 추천 취소' : '👍 추천하기'} · {likeState.likes}
+        </button>
 
         <div
           style={{
@@ -174,6 +203,10 @@ export const PostDetailPage = () => {
         <div style={{ paddingTop: '20px' }}>
           <MarkdownContent content={post.content} />
         </div>
+      </div>
+
+      <div style={{ ...cardStyle, marginBottom: '20px' }}>
+        <CommentSection postId={post.id} onCountChange={setCommentCount} />
       </div>
 
       <Link to="/" style={{ color: colors.accent, fontSize: '14px', textDecoration: 'none' }}>

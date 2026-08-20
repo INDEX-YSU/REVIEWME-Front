@@ -15,6 +15,7 @@ export type Post = {
   views: number;
   hasAiSummary: boolean;
   aiSummary?: string;
+  likedByMe?: boolean;
 };
 
 // Mock: 백엔드 연동 전이므로 현재 로그인 사용자를 고정값으로 가정
@@ -273,6 +274,14 @@ export const setPostAiSummary = (id: number, summary: string): void => {
   if (!target) return;
   target.aiSummary = summary;
   target.hasAiSummary = true;
+};
+
+export const toggleLike = (id: number): Post | undefined => {
+  const target = posts.find((post) => post.id === id);
+  if (!target) return undefined;
+  target.likedByMe = !target.likedByMe;
+  target.likes += target.likedByMe ? 1 : -1;
+  return target;
 };
 
 export const getExcerpt = (content: string, maxLength = 90): string => {
