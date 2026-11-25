@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { POST_CATEGORIES, type PostCategory, type PostInput } from '../mocks/posts';
+import { POST_CATEGORIES, type PostCategory, type PostInput } from '../posts';
+import { errorMessage } from '../api';
 import { colors, radius, cardStyle, primaryButtonStyle, secondaryButtonStyle, inputStyle, fontMono } from '../styles/theme';
 import { MarkdownContent } from './MarkdownContent';
 
 type PostFormProps = {
   initialValues?: PostInput;
   submitLabel: string;
-  onSubmit: (values: PostInput) => void;
+  onSubmit: (values: PostInput) => Promise<void>;
   onCancel: () => void;
 };
 
@@ -38,15 +39,25 @@ export const PostForm = ({ initialValues, submitLabel, onSubmit, onCancel }: Pos
   const [category, setCategory] = useState<PostCategory | ''>(initialValues?.category ?? '');
   const [content, setContent] = useState(initialValues?.content ?? '');
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState('');
 
   const errors = validate(title, category, content);
   const hasErrors = Object.keys(errors).length > 0;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
-    if (hasErrors) return;
-    onSubmit({ title: title.trim(), category: category as PostCategory, content });
+    if (hasErrors || busy) return;
+    setBusy(true);
+    setServerError('');
+    try {
+      await onSubmit({ title: title.trim(), category: category as PostCategory, content });
+    } catch (error) {
+      setServerError(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -54,6 +65,8 @@ export const PostForm = ({ initialValues, submitLabel, onSubmit, onCancel }: Pos
       <div>
         <input
           type="text"
+          aria-label="제목"
+          maxLength={255}
           placeholder="제목을 입력하세요"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -64,6 +77,7 @@ export const PostForm = ({ initialValues, submitLabel, onSubmit, onCancel }: Pos
 
       <div>
         <select
+          aria-label="카테고리"
           value={category}
           onChange={(e) => setCategory(e.target.value as PostCategory)}
           style={{ ...inputStyle, width: '220px' }}
@@ -82,6 +96,8 @@ export const PostForm = ({ initialValues, submitLabel, onSubmit, onCancel }: Pos
         <div>
           <p style={labelStyle}>본문 (Markdown)</p>
           <textarea
+            aria-label="본문"
+            maxLength={10000}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={'마크다운 문법으로 작성할 수 있어요.\n예) # 제목, **굵게**, ```코드블록```'}
@@ -112,10 +128,11 @@ export const PostForm = ({ initialValues, submitLabel, onSubmit, onCancel }: Pos
         <button type="button" onClick={onCancel} style={secondaryButtonStyle}>
           취소
         </button>
-        <button type="submit" style={primaryButtonStyle}>
+        <button type="submit" style={primaryButtonStyle} disabled={busy}>
           {submitLabel}
         </button>
       </div>
+      {serverError && <p role="alert" style={errorTextStyle}>{serverError}</p>}
     </form>
   );
 };

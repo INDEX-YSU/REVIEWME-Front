@@ -1,129 +1,51 @@
 import { useState } from 'react';
+import { api, dateTime, errorMessage } from '../api';
+import { colors, inputStyle, primaryButtonStyle } from '../styles/theme';
 import { Modal } from './Modal';
-import { INVITE_EXPIRY_OPTIONS, createInviteToken } from '../mocks/chatInvites';
-import type { InviteExpiryKey } from '../mocks/chatInvites';
-import { addInvitedUser } from '../mocks/chatRooms';
-import { searchUsers } from '../mocks/users';
-import { colors, radius, inputStyle, primaryButtonStyle, secondaryButtonStyle } from '../styles/theme';
 
-type PrivateInviteModalProps = {
-  roomId: number;
-  onClose: () => void;
-};
+export function PrivateInviteModal({ roomId, onClose }: { roomId: number; onClose: () => void }) {
+  const [minutes, setMinutes] = useState(60);
+  const [invite, setInvite] = useState<{ token: string; expiresAt: string }>();
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const url = invite ? `${window.location.origin}/chat/invite/${invite.token}` : '';
 
-export const PrivateInviteModal = ({ roomId, onClose }: PrivateInviteModalProps) => {
-  const [expiry, setExpiry] = useState<InviteExpiryKey>('24h');
-  const [inviteLink, setInviteLink] = useState('');
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
-
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [invitedIds, setInvitedIds] = useState<string[]>([]);
-
-  const handleGenerateLink = () => {
-    const token = createInviteToken(roomId, expiry);
-    setInviteLink(`${window.location.origin}/chat/invite/${token}`);
-    setCopyStatus('idle');
-  };
-
-  const handleCopyLink = async () => {
+  const generate = async () => {
+    if (busy) return;
+    setBusy(true);
+    setFeedback('');
     try {
-      await navigator.clipboard.writeText(inviteLink);
-      setCopyStatus('copied');
-      setTimeout(() => setCopyStatus('idle'), 2000);
-    } catch {
-      setCopyStatus('idle');
+      setInvite(await api(`/chat/rooms/${roomId}/invites`, { method: 'POST', body: { minutes } }));
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleInviteUser = (userId: string) => {
-    addInvitedUser(roomId, userId);
-    setInvitedIds((prev) => [...prev, userId]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setFeedback('초대 링크를 복사했습니다.');
+    } catch {
+      setFeedback('링크 입력란에서 주소를 직접 복사해 주세요.');
+    }
   };
 
-  const searchResults = searchUsers(searchKeyword);
-
-  return (
-    <Modal title="채팅방 초대하기" onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <section>
-          <p style={{ fontSize: '13px', fontWeight: 600, color: colors.textHeading, marginBottom: '8px' }}>초대 링크 생성</p>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-            <select value={expiry} onChange={(e) => setExpiry(e.target.value as InviteExpiryKey)} style={{ ...inputStyle, flex: 1 }}>
-              {INVITE_EXPIRY_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label} 후 만료
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={handleGenerateLink} style={secondaryButtonStyle}>
-              링크 생성
-            </button>
-          </div>
-
-          {inviteLink && (
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input readOnly value={inviteLink} style={{ ...inputStyle, flex: 1, fontSize: '12px', color: colors.text }} />
-              <button type="button" onClick={handleCopyLink} style={primaryButtonStyle}>
-                {copyStatus === 'copied' ? '복사됨!' : '복사'}
-              </button>
-            </div>
-          )}
-        </section>
-
-        <div style={{ height: '1px', background: colors.borderSubtle }} />
-
-        <section>
-          <p style={{ fontSize: '13px', fontWeight: 600, color: colors.textHeading, marginBottom: '8px' }}>사용자 검색으로 초대</p>
-          <input
-            type="text"
-            placeholder="닉네임으로 검색"
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            style={inputStyle}
-          />
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', maxHeight: '160px', overflowY: 'auto' }}>
-            {searchResults.map((user) => {
-              const invited = invitedIds.includes(user.id);
-              return (
-                <div
-                  key={user.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '8px 10px',
-                    borderRadius: radius.md,
-                    border: `1px solid ${colors.border}`,
-                  }}
-                >
-                  <span style={{ fontSize: '13px', color: colors.textHeading }}>{user.nickname}</span>
-                  <button
-                    type="button"
-                    disabled={invited}
-                    onClick={() => handleInviteUser(user.id)}
-                    style={{
-                      ...secondaryButtonStyle,
-                      fontSize: '12px',
-                      padding: '6px 10px',
-                      opacity: invited ? 0.6 : 1,
-                      cursor: invited ? 'default' : 'pointer',
-                    }}
-                  >
-                    {invited ? '초대됨' : '초대'}
-                  </button>
-                </div>
-              );
-            })}
-
-            {searchKeyword && searchResults.length === 0 && (
-              <p style={{ fontSize: '12px', color: colors.text, textAlign: 'center', padding: '10px 0' }}>
-                검색 결과가 없어요.
-              </p>
-            )}
-          </div>
-        </section>
-      </div>
-    </Modal>
-  );
-};
+  return <Modal title="채팅방에 초대" onClose={onClose}>
+    <p style={{ color: colors.text, marginBottom: 12 }}>초대 링크 하나로 새 참가자 한 명이 입장할 수 있어요.</p>
+    <div className="mvp-toolbar">
+      <select aria-label="초대 유효 시간" style={{ ...inputStyle, width: 'auto' }} value={minutes}
+        onChange={(event) => setMinutes(Number(event.target.value))}>
+        <option value={60}>1시간</option><option value={1440}>24시간</option><option value={10080}>7일</option>
+      </select>
+      <button type="button" disabled={busy} onClick={generate} style={primaryButtonStyle}>초대 링크 발급</button>
+    </div>
+    {invite && <div style={{ marginTop: 14 }}>
+      <p>만료 {dateTime(invite.expiresAt)}</p>
+      <input aria-label="초대 링크" style={inputStyle} value={url} readOnly onFocus={(event) => event.target.select()} />
+      <button type="button" onClick={copy} style={primaryButtonStyle}>링크 복사</button>
+    </div>}
+    {feedback && <p role="status" style={{ marginTop: 12 }}>{feedback}</p>}
+  </Modal>;
+}

@@ -106,3 +106,61 @@ code {
   background: var(--code-bg);
   color: var(--text-h);
 }
+.mvp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.mvp-header {
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+
+.mvp-header-brand {
+  min-height: 48px;
+  column-gap: 24px;
+}
+
+.community-intro {
+  margin-bottom: 20px;
+  padding: clamp(20px, 4vw, 36px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(115deg, var(--bg) 20%, var(--accent-bg));
+}
+
+.community-intro h1 {
+  margin: 0 0 6px;
+  font-size: clamp(24px, 4vw, 36px);
+  letter-spacing: -0.045em;
+}
+
+.community-intro p {
+  margin: 0;
+}
+
+.post-list-card {
+  overflow-wrap: anywhere;
+}
+
+.review-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100svh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.review-dialog::backdrop {
+  background: rgb(0 0 0 / 50%);
+}
+
+button:disabled {
+  cursor: default !important;
+  opacity: 0.65;
+}

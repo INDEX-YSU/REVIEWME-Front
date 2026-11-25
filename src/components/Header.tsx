@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { colors, badgeStyle } from '../styles/theme';
+import { errorMessage } from '../api';
+import { colors } from '../styles/theme';
 import { useAuth } from '../context/useAuth';
 
 type NavItem = {
@@ -14,16 +16,27 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export const Header = () => {
-  const { user, role, logout } = useAuth();
+  const { user, logout, ready } = useAuth();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const signOut = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try { await logout(); }
+    catch (failure) { setError(errorMessage(failure)); }
+    finally { setBusy(false); }
+  };
 
   return (
-    <header
+    <header className="mvp-header"
       style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 24px',
-        height: '60px',
+        minHeight: '60px',
         borderBottom: `1px solid ${colors.border}`,
         background: colors.bg,
         position: 'sticky',
@@ -31,7 +44,7 @@ export const Header = () => {
         zIndex: 10,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+      <div className="mvp-toolbar mvp-header-brand">
         <Link
           to="/"
           style={{
@@ -44,7 +57,7 @@ export const Header = () => {
         >
           REVIEWME
         </Link>
-        <nav style={{ display: 'flex', gap: '20px' }}>
+        <nav className="mvp-toolbar" aria-label="주 메뉴">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
@@ -63,14 +76,15 @@ export const Header = () => {
         </nav>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span style={badgeStyle(role === 'USER' ? 'user' : 'guest')}>{role}</span>
-        {user.isLoggedIn ? (
+      <div className="mvp-toolbar">
+        {error && <span role="alert" style={{ color: colors.danger }}>{error}</span>}
+        {ready && (user.isLoggedIn ? (
           <>
             <span style={{ fontSize: '14px', color: colors.textHeading, fontWeight: 600 }}>{user.nickname}</span>
             <button
               type="button"
-              onClick={logout}
+              onClick={signOut}
+              disabled={busy}
               style={{
                 background: 'none',
                 border: 'none',
@@ -106,7 +120,7 @@ export const Header = () => {
               회원가입
             </Link>
           </>
-        )}
+        ))}
       </div>
     </header>
   );

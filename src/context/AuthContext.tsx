@@ -1,93 +1,67 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { api, ApiError, refreshSession, setAccessToken } from '../api';
 import { AuthContext } from './authContextInstance';
-import type { AuthUser, OAuthProvider, ProfilePatch, UserRole } from './authTypes';
+import type { AuthUser, ProfilePatch } from './authTypes';
 
-const GUEST_USER: AuthUser = {
-  isLoggedIn: false,
-  nickname: '게스트',
-  email: '',
-  profileImage: '',
-  bio: '',
-  affiliation: '',
-  techStack: [],
-  githubConnected: false,
-  githubUsername: null,
-  googleConnected: false,
-  googleEmail: null,
-};
+type Profile = Omit<AuthUser, 'isLoggedIn'>;
+const sessionMarker = 'reviewme-session-present';
 
-const STORAGE_KEY = 'reviewme_auth_user';
-const TOKEN_KEY = 'reviewme_auth_token';
-
-const MOCK_OAUTH_PROFILES: Record<OAuthProvider, { nickname: string; email: string; bio: string }> = {
-  github: {
-    nickname: '리뷰미',
-    email: 'ysmin0530@gmail.com',
-    bio: 'AI 기반 개발자 커뮤니티 INDEX를 만들고 있어요.',
-  },
-  google: {
-    nickname: '리뷰미',
-    email: 'ysmin0530@gmail.com',
-    bio: '',
-  },
-};
-
-const readStoredUser = (): AuthUser => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return GUEST_USER;
-    return { ...GUEST_USER, ...(JSON.parse(raw) as Partial<AuthUser>) };
-  } catch {
-    return GUEST_USER;
-  }
+const guest: AuthUser = {
+  isLoggedIn: false, userId: '', nickname: '게스트', email: '', profileImage: '',
+  bio: '', affiliation: '', techStack: [],
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<AuthUser>(() => readStoredUser());
+  const [user, setUser] = useState(guest);
+  const [ready, setReady] = useState(() => localStorage.getItem(sessionMarker) !== '1');
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-  }, [user]);
-
-  const loginWithOAuth = useCallback((provider: OAuthProvider) => {
-    const profile = MOCK_OAUTH_PROFILES[provider];
-    localStorage.setItem(TOKEN_KEY, `mock-${provider}-token-${Date.now()}`);
-
-    setUser((prev) => ({
-      ...prev,
-      isLoggedIn: true,
-      nickname: prev.isLoggedIn ? prev.nickname : profile.nickname,
-      email: prev.isLoggedIn ? prev.email : profile.email,
-      bio: prev.isLoggedIn ? prev.bio : profile.bio,
-      ...(provider === 'github'
-        ? { githubConnected: true, githubUsername: 'reviewme-dev' }
-        : { googleConnected: true, googleEmail: profile.email }),
-    }));
+    let mounted = true;
+    const expire = () => {
+      localStorage.removeItem(sessionMarker);
+      setUser(guest);
+    };
+    window.addEventListener('reviewme-session-expired', expire);
+    if (localStorage.getItem(sessionMarker) === '1') void refreshSession()
+      .then(() => api<Profile>('/profile'))
+      .then((profile) => { if (mounted) setUser({ ...profile, isLoggedIn: true }); })
+      .catch((error: unknown) => {
+        if (!mounted) return;
+        setAccessToken();
+        if (error instanceof ApiError && error.status === 401) expire();
+      })
+      .finally(() => { if (mounted) setReady(true); });
+    return () => {
+      mounted = false;
+      window.removeEventListener('reviewme-session-expired', expire);
+    };
   }, []);
 
-  const disconnectProvider = useCallback((provider: OAuthProvider) => {
-    setUser((prev) => ({
-      ...prev,
-      ...(provider === 'github'
-        ? { githubConnected: false, githubUsername: null }
-        : { googleConnected: false, googleEmail: null }),
-    }));
-  }, []);
+  const login = async (email: string, password: string) => {
+    const { accessToken } = await api<{ accessToken: string }>('/auth/login', {
+      method: 'POST', body: { email, password },
+    });
+    setAccessToken(accessToken);
+    localStorage.setItem(sessionMarker, '1');
+    const profile = await api<Profile>('/profile');
+    setUser({ ...profile, isLoggedIn: true });
+  };
 
-  const updateProfile = useCallback((patch: ProfilePatch) => {
-    setUser((prev) => ({ ...prev, ...patch }));
-  }, []);
+  const updateProfile = async (body: ProfilePatch) => {
+    const profile = await api<Profile>('/profile', { method: 'PUT', body });
+    setUser({ ...profile, isLoggedIn: true });
+  };
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    setUser(GUEST_USER);
-  }, []);
-
-  const role: UserRole = user.isLoggedIn && user.githubConnected ? 'USER' : 'GUEST';
+  const logout = async () => {
+    await api('/auth/logout', { method: 'POST' });
+    setAccessToken();
+    localStorage.removeItem(sessionMarker);
+    setUser(guest);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, role, loginWithOAuth, disconnectProvider, updateProfile, logout }}>
+    <AuthContext.Provider value={{ user, ready, login, updateProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );

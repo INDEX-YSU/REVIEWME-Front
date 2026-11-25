@@ -1,232 +1,65 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getExcerpt, getPosts } from '../mocks/posts';
-import { colors, radius, cardStyle, inputStyle, primaryButtonStyle } from '../styles/theme';
+import { dateTime } from '../api';
 import { EmptyState } from '../components/EmptyState';
-import { SkeletonLine } from '../components/Skeleton';
-import { useMockLoading } from '../hooks/useMockLoading';
+import { Loading, RequestError } from '../components/ResourceState';
+import { useResource } from '../hooks/useResource';
+import { getExcerpt, type Post } from '../posts';
+import { cardStyle, colors, inputStyle, primaryButtonStyle, secondaryButtonStyle } from '../styles/theme';
 
-const SORT_OPTIONS = [
-  { key: 'latest', label: '최신순' },
-  { key: 'likes', label: '추천순' },
-  { key: 'views', label: '조회순' },
-] as const;
+const sorts = { latest: '최신순', likes: '추천순', views: '조회순' } as const;
+type Sort = keyof typeof sorts;
+const pageSize = 5;
 
-type SortKey = (typeof SORT_OPTIONS)[number]['key'];
-
-const PAGE_SIZE = 5;
-
-export const MainPage = () => {
-  const isLoading = useMockLoading(500);
+export function MainPage() {
+  const { result, reload } = useResource<Post[]>('/posts');
   const [keyword, setKeyword] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('latest');
+  const [sort, setSort] = useState<Sort>('latest');
   const [page, setPage] = useState(1);
+  if (result.status === 'loading') return <Loading />;
+  if (result.status === 'error') return <RequestError message={result.message} retry={reload} />;
 
-  // 검색어/정렬이 바뀌면 1페이지로 리셋 (렌더 중 상태 조정 패턴)
-  const [prevKeyword, setPrevKeyword] = useState(keyword);
-  const [prevSortKey, setPrevSortKey] = useState(sortKey);
-  if (keyword !== prevKeyword || sortKey !== prevSortKey) {
-    setPrevKeyword(keyword);
-    setPrevSortKey(sortKey);
-    setPage(1);
-  }
+  const query = keyword.trim().toLocaleLowerCase();
+  const posts = result.value.filter(({ title, content, author }) =>
+    [title, content, author].some((value) => value.toLocaleLowerCase().includes(query)));
+  posts.sort((a, b) => (sort === 'latest' ? 0 : b[sort] - a[sort]) || b.id - a.id);
+  const pages = Math.max(1, Math.ceil(posts.length / pageSize));
+  const current = Math.min(page, pages);
+  const visiblePosts = posts.slice((current - 1) * pageSize, current * pageSize);
 
-  const posts = useMemo(() => {
-    const filtered = getPosts().filter(
-      (post) => post.title.includes(keyword) || post.content.includes(keyword) || post.author.includes(keyword),
-    );
-
-    return [...filtered].sort((a, b) => {
-      if (sortKey === 'likes') return b.likes - a.likes;
-      if (sortKey === 'views') return b.views - a.views;
-      return b.createdAt.localeCompare(a.createdAt);
-    });
-  }, [keyword, sortKey]);
-
-  const totalPages = Math.max(1, Math.ceil(posts.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pagedPosts = posts.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-        <input
-          type="text"
-          placeholder="제목, 내용, 작성자로 검색"
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {SORT_OPTIONS.map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              onClick={() => setSortKey(option.key)}
-              style={{
-                padding: '10px 14px',
-                borderRadius: radius.md,
-                border: `1px solid ${sortKey === option.key ? colors.accentBorder : colors.border}`,
-                background: sortKey === option.key ? colors.accentBg : colors.bg,
-                color: sortKey === option.key ? colors.accent : colors.text,
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <Link to="/posts/create" style={{ ...primaryButtonStyle, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-          글쓰기
-        </Link>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {isLoading &&
-          Array.from({ length: 3 }, (_, i) => (
-            <div key={i} style={cardStyle}>
-              <SkeletonLine width="70%" />
-              <div style={{ height: '10px' }} />
-              <SkeletonLine width="95%" />
-              <div style={{ height: '6px' }} />
-              <SkeletonLine width="40%" />
-            </div>
-          ))}
-
-        {!isLoading &&
-          pagedPosts.map((post) => (
-          <Link key={post.id} to={`/posts/${post.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-            <article style={cardStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: colors.text,
-                    background: colors.bgSubtle,
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: radius.pill,
-                    padding: '2px 8px',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {post.category}
-                </span>
-                <h3 style={{ fontSize: '17px' }}>{post.title}</h3>
-                {post.hasAiSummary && (
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: colors.accent,
-                      background: colors.accentBg,
-                      border: `1px solid ${colors.accentBorder}`,
-                      borderRadius: radius.pill,
-                      padding: '2px 8px',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    AI 요약
-                  </span>
-                )}
-              </div>
-              <p style={{ color: colors.text, fontSize: '14px', marginBottom: '14px' }}>{getExcerpt(post.content)}</p>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '12px',
-                  color: colors.text,
-                }}
-              >
-                <span>
-                  {post.author} · {post.createdAt}
-                </span>
-                <span style={{ display: 'flex', gap: '12px' }}>
-                  <span>추천 {post.likes}</span>
-                  <span>댓글 {post.comments}</span>
-                  <span>조회 {post.views.toLocaleString()}</span>
-                </span>
-              </div>
-            </article>
-          </Link>
-        ))}
-
-        {!isLoading && pagedPosts.length === 0 && (
-          <EmptyState
-            icon="🔍"
-            title="검색 결과가 없어요"
-            description={keyword ? `'${keyword}'에 대한 게시글을 찾을 수 없어요.` : '아직 등록된 게시글이 없어요.'}
-          />
-        )}
-      </div>
-
-      {!isLoading && posts.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginTop: '28px' }}>
-          <button
-            type="button"
-            disabled={safePage === 1}
-            onClick={() => setPage(Math.max(1, safePage - 1))}
-            style={{
-              padding: '8px 12px',
-              borderRadius: radius.md,
-              border: `1px solid ${colors.border}`,
-              background: colors.bg,
-              color: colors.text,
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: safePage === 1 ? 'not-allowed' : 'pointer',
-              opacity: safePage === 1 ? 0.5 : 1,
-            }}
-          >
-            이전
-          </button>
-
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => (
-            <button
-              key={pageNumber}
-              type="button"
-              onClick={() => setPage(pageNumber)}
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: radius.md,
-                border: `1px solid ${safePage === pageNumber ? colors.accentBorder : colors.border}`,
-                background: safePage === pageNumber ? colors.accentBg : colors.bg,
-                color: safePage === pageNumber ? colors.accent : colors.text,
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {pageNumber}
-            </button>
-          ))}
-
-          <button
-            type="button"
-            disabled={safePage === totalPages}
-            onClick={() => setPage(Math.min(totalPages, safePage + 1))}
-            style={{
-              padding: '8px 12px',
-              borderRadius: radius.md,
-              border: `1px solid ${colors.border}`,
-              background: colors.bg,
-              color: colors.text,
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
-              opacity: safePage === totalPages ? 0.5 : 1,
-            }}
-          >
-            다음
-          </button>
-        </div>
-      )}
+  return <div>
+    <section className="community-intro" aria-labelledby="community-title">
+      <h1 id="community-title">코드 리뷰 커뮤니티</h1>
+      <p>코드를 공유하고 동료에게 피드백을 받아보세요.</p>
+    </section>
+    <div className="mvp-toolbar" style={{ marginBottom: 20 }}>
+      <input aria-label="게시글 검색" placeholder="제목, 내용, 작성자로 검색" value={keyword}
+        onChange={(event) => { setKeyword(event.target.value); setPage(1); }} style={{ ...inputStyle, flex: '1 1 240px' }} />
+      <select aria-label="정렬" value={sort} onChange={(event) => { setSort(event.target.value as Sort); setPage(1); }}
+        style={{ ...inputStyle, width: 'auto' }}>
+        {Object.entries(sorts).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+      </select>
+      <Link to="/posts/create" style={primaryButtonStyle}>글쓰기</Link>
     </div>
-  );
-};
+    <div style={{ display: 'grid', gap: 12 }}>
+      {!visiblePosts.length && <EmptyState icon="📝" title={query ? '검색 결과가 없어요' : '아직 게시글이 없어요'}
+        description={query ? '다른 검색어로 찾아보세요.' : '첫 게시글을 작성해 보세요.'} />}
+      {visiblePosts.map((post) => <article key={post.id} className="post-list-card" style={cardStyle}>
+        <span style={{ color: colors.accent, fontSize: 13, fontWeight: 700 }}>{post.category}</span>
+        <h2 style={{ fontSize: 19, margin: '6px 0' }}><Link to={`/posts/${post.id}`} style={{ color: colors.textHeading }}>
+          {post.title}
+        </Link></h2>
+        <p>{getExcerpt(post.content)}</p>
+        <p className="mvp-toolbar" style={{ color: colors.text, fontSize: 13, marginTop: 10 }}>
+          <span>{post.author}</span><time dateTime={post.createdAt}>{dateTime(post.createdAt)}</time>
+          <span>추천 {post.likes}</span><span>댓글 {post.comments}</span><span>조회 {post.views}</span>
+        </p>
+      </article>)}
+    </div>
+    {pages > 1 && <nav aria-label="게시글 페이지" className="mvp-toolbar" style={{ marginTop: 16, justifyContent: 'center' }}>
+      <button type="button" disabled={current <= 1} onClick={() => setPage(current - 1)} style={secondaryButtonStyle}>이전</button>
+      <span>{current} / {pages}</span>
+      <button type="button" disabled={current >= pages} onClick={() => setPage(current + 1)} style={secondaryButtonStyle}>다음</button>
+    </nav>}
+  </div>;
+}

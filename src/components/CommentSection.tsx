@@ -1,135 +1,81 @@
 import { useEffect, useState } from 'react';
-import { CURRENT_USER_ID } from '../mocks/posts';
-import { addComment, deleteComment, getCommentsByPostId, updateComment } from '../mocks/comments';
-import type { Comment } from '../mocks/comments';
-import { colors, cardStyle, inputStyle, primaryButtonStyle, secondaryButtonStyle } from '../styles/theme';
-import { EmptyState } from './EmptyState';
-import { SkeletonLine } from './Skeleton';
-import { useMockLoading } from '../hooks/useMockLoading';
+import { Link } from 'react-router-dom';
+import { api, dateTime, errorMessage } from '../api';
+import { useAuth } from '../context/useAuth';
+import { useResource } from '../hooks/useResource';
+import type { Comment } from '../posts';
+import { cardStyle, colors, inputStyle, primaryButtonStyle, secondaryButtonStyle } from '../styles/theme';
+import { Loading, RequestError } from './ResourceState';
 
-type CommentSectionProps = {
-  postId: number;
-  onCountChange?: (count: number) => void;
-};
+type Props = { postId: number; initialCount: number; onCountChange: (count: number) => void };
 
-export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) => {
-  const isLoading = useMockLoading(450);
-  const [comments, setComments] = useState<Comment[]>(() => getCommentsByPostId(postId));
-  const [newContent, setNewContent] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editContent, setEditContent] = useState('');
+export function CommentSection({ postId, initialCount, onCountChange }: Props) {
+  const path = `/posts/${postId}/comments`;
+  const { result, reload } = useResource<Comment[]>(path);
+  const count = result.status === 'ready' ? result.value.length : initialCount;
+  useEffect(() => { onCountChange(count); }, [count, onCountChange]);
+  if (result.status === 'loading') return <Loading />;
+  if (result.status === 'error') return <RequestError message={result.message} retry={reload} />;
+  return <Comments path={path} items={result.value} reload={reload} />;
+}
 
-  useEffect(() => {
-    onCountChange?.(comments.length);
-  }, [comments.length, onCountChange]);
+function Comments({ path, items, reload }: { path: string; items: Comment[]; reload: () => void }) {
+  const { user } = useAuth();
+  const [draft, setDraft] = useState('');
+  const [edit, setEdit] = useState<{ id: number; content: string }>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newContent.trim()) return;
-    const comment = addComment(postId, newContent.trim());
-    setComments((prev) => [...prev, comment]);
-    setNewContent('');
-  };
-
-  const handleStartEdit = (comment: Comment) => {
-    setEditingId(comment.id);
-    setEditContent(comment.content);
-  };
-
-  const handleSaveEdit = (id: number) => {
-    if (!editContent.trim()) return;
-    const updated = updateComment(id, editContent.trim());
-    if (updated) {
-      setComments((prev) => prev.map((comment) => (comment.id === id ? updated : comment)));
+  const change = async (method: string, id?: number, content?: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api(id === undefined ? path : `${path}/${id}`, {
+        method, body: content === undefined ? undefined : { content },
+      });
+      if (method === 'POST') setDraft('');
+      if (id === edit?.id) setEdit(undefined);
+      reload();
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
     }
-    setEditingId(null);
   };
 
-  const handleDelete = (id: number) => {
-    if (!window.confirm('댓글을 삭제하시겠어요?')) return;
-    deleteComment(id);
-    setComments((prev) => prev.filter((comment) => comment.id !== id));
-  };
-
-  return (
-    <div>
-      <h3 style={{ fontSize: '15px', marginBottom: '14px' }}>댓글 {comments.length}</h3>
-
-      {isLoading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-          <SkeletonLine width="60%" />
-          <SkeletonLine width="90%" />
-          <SkeletonLine width="40%" />
+  return <>
+    <h3 style={{ marginBottom: 12 }}>댓글 {items.length}</h3>
+    <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+      {items.length === 0 && <p style={{ color: colors.text }}>아직 댓글이 없어요.</p>}
+      {items.map((comment) => <article key={comment.id} style={cardStyle}>
+        <div className="mvp-toolbar" style={{ marginBottom: 6 }}>
+          <strong>{comment.author}</strong>
+          <time dateTime={comment.createdAt} style={{ color: colors.text }}>{dateTime(comment.createdAt)}</time>
+          {comment.authorId === user.userId && edit?.id !== comment.id && <>
+            <button type="button" onClick={() => setEdit(comment)} style={secondaryButtonStyle}>댓글 수정</button>
+            <button type="button" disabled={busy} style={secondaryButtonStyle}
+              onClick={() => { if (window.confirm('댓글을 삭제하시겠어요?')) void change('DELETE', comment.id); }}>댓글 삭제</button>
+          </>}
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-          {comments.map((comment) => (
-            <div key={comment.id} style={cardStyle}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: colors.textHeading }}>{comment.author}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '12px', color: colors.text }}>{comment.createdAt}</span>
-                  {comment.authorId === CURRENT_USER_ID && editingId !== comment.id && (
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleStartEdit(comment)}
-                        style={{ background: 'none', border: 'none', color: colors.accent, fontSize: '12px', cursor: 'pointer', padding: 0 }}
-                      >
-                        수정
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(comment.id)}
-                        style={{ background: 'none', border: 'none', color: colors.danger, fontSize: '12px', cursor: 'pointer', padding: 0 }}
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {editingId === comment.id ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <textarea
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                    <button type="button" onClick={() => setEditingId(null)} style={secondaryButtonStyle}>
-                      취소
-                    </button>
-                    <button type="button" onClick={() => handleSaveEdit(comment.id)} style={primaryButtonStyle}>
-                      저장
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ fontSize: '14px', color: colors.textHeading, lineHeight: 1.6 }}>{comment.content}</p>
-              )}
-            </div>
-          ))}
-
-          {comments.length === 0 && (
-            <EmptyState icon="💬" title="아직 댓글이 없어요" description="가장 먼저 댓글을 남겨보세요." />
-          )}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '8px' }}>
-        <input
-          type="text"
-          placeholder="댓글을 입력해주세요"
-          value={newContent}
-          onChange={(e) => setNewContent(e.target.value)}
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <button type="submit" style={primaryButtonStyle}>
-          작성
-        </button>
-      </form>
+        {edit?.id === comment.id ? <form onSubmit={(event) => { event.preventDefault(); void change('PUT', edit.id, edit.content); }}>
+          <textarea aria-label="댓글 수정" value={edit.content} maxLength={2000} required style={inputStyle}
+            onChange={(event) => setEdit({ ...edit, content: event.target.value })} />
+          <div className="mvp-toolbar">
+            <button type="submit" disabled={busy || !edit.content.trim()} style={primaryButtonStyle}>저장</button>
+            <button type="button" onClick={() => setEdit(undefined)} style={secondaryButtonStyle}>취소</button>
+          </div>
+        </form> : <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{comment.content}</p>}
+      </article>)}
     </div>
-  );
-};
+    {error && <p role="alert" style={{ color: colors.danger }}>{error}</p>}
+    {user.isLoggedIn ? <form className="mvp-toolbar" onSubmit={(event) => {
+      event.preventDefault();
+      if (draft.trim()) void change('POST', undefined, draft);
+    }}>
+      <input aria-label="댓글" placeholder="댓글을 입력해주세요" value={draft} maxLength={2000}
+        style={{ ...inputStyle, flex: 1 }} onChange={(event) => setDraft(event.target.value)} required />
+      <button type="submit" disabled={busy || !draft.trim()} style={primaryButtonStyle}>댓글 작성</button>
+    </form> : <Link to={`/login?next=${encodeURIComponent(`/posts/${items[0]?.postId ?? path.split('/')[2]}`)}`}>로그인하고 댓글 작성</Link>}
+  </>;
+}

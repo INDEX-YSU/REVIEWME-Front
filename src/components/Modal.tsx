@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { colors, cardStyle, shadow } from '../styles/theme';
+import { cardStyle, secondaryButtonStyle } from '../styles/theme';
 
 type ModalProps = {
   title: string;
@@ -8,61 +8,25 @@ type ModalProps = {
   children: ReactNode;
 };
 
-export const Modal = ({ title, onClose, children }: ModalProps) => {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+export function Modal({ title, onClose, children }: ModalProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-        zIndex: 100,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          ...cardStyle,
-          boxShadow: shadow,
-          width: '100%',
-          maxWidth: '440px',
-          maxHeight: '85vh',
-          overflowY: 'auto',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '18px' }}>{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="닫기"
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '18px',
-              color: colors.text,
-              cursor: 'pointer',
-              lineHeight: 1,
-              padding: '4px',
-            }}
-          >
-            ✕
-          </button>
-        </div>
-        {children}
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    return () => dialog?.close();
+  }, []);
+
+  return <dialog ref={dialogRef} className="review-dialog" aria-labelledby={titleId}
+    onCancel={(event) => { event.preventDefault(); onClose(); }}
+    onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div style={cardStyle}>
+      <div className="mvp-toolbar" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
+        <h2 id={titleId} style={{ fontSize: 18 }}>{title}</h2>
+        <button type="button" onClick={onClose} aria-label="닫기" style={secondaryButtonStyle}>×</button>
       </div>
+      {children}
     </div>
-  );
-};
+  </dialog>;
+}

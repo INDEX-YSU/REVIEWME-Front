@@ -1,217 +1,101 @@
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CURRENT_USER_ID, deletePost, getPostById, setPostAiSummary, toggleLike } from '../mocks/posts';
-import { generateAiSummary } from '../mocks/aiSummary';
-import { colors, radius, shadow, cardStyle, secondaryButtonStyle } from '../styles/theme';
-import { MarkdownContent } from '../components/MarkdownContent';
-import { InfoScreen } from '../components/InfoScreen';
-import { Spinner } from '../components/Spinner';
-import { SkeletonLine } from '../components/Skeleton';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { api, dateTime, errorMessage } from '../api';
 import { CommentSection } from '../components/CommentSection';
+import { InfoScreen } from '../components/InfoScreen';
+import { MarkdownContent } from '../components/MarkdownContent';
+import { Loading, RequestError } from '../components/ResourceState';
+import { useAuth } from '../context/useAuth';
+import { useResource } from '../hooks/useResource';
+import { getExcerpt, type Post } from '../posts';
+import { cardStyle, colors, secondaryButtonStyle, shadow } from '../styles/theme';
 
-type SummaryStatus = 'idle' | 'loading' | 'error';
-
-export const PostDetailPage = () => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const post = id ? getPostById(Number(id)) : undefined;
-
-  const [summary, setSummary] = useState<string | null>(post?.aiSummary ?? null);
-  const [summaryStatus, setSummaryStatus] = useState<SummaryStatus>('idle');
-  const [likeState, setLikeState] = useState({ likes: post?.likes ?? 0, likedByMe: post?.likedByMe ?? false });
-  const [commentCount, setCommentCount] = useState(post?.comments ?? 0);
-
-  if (!post) {
-    return (
-      <InfoScreen
-        title="존재하지 않는 게시글입니다"
-        description="요청하신 게시글을 찾을 수 없어요. 주소를 다시 확인해주세요."
-        actionLabel="목록으로"
-        actionTo="/"
-      />
-    );
+export function PostDetailPage() {
+  const { id } = useParams();
+  const location = useLocation();
+  const { result, reload } = useResource<Post>(`/posts/${id}`);
+  if (result.status === 'loading') return <Loading />;
+  if (result.status === 'error') {
+    if (result.statusCode === 404) return <InfoScreen title="게시글을 찾을 수 없습니다"
+      description="게시글 주소를 확인해 주세요." actionLabel="목록으로" actionTo="/" />;
+    return <RequestError message={result.message} retry={reload} />;
   }
+  return <PostView key={location.key} post={result.value} />;
+}
 
-  const isOwner = post.authorId === CURRENT_USER_ID;
+function PostView({ post }: { post: Post }) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const postPath = `/posts/${post.id}`;
+  const [views, setViews] = useState(post.views);
+  const viewRequest = useRef<Promise<number> | null>(null);
+  const [like, setLike] = useState({ likes: post.likes, likedByMe: post.likedByMe });
+  const [commentCount, setCommentCount] = useState(post.comments);
+  const [showExcerpt, setShowExcerpt] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const loginPath = `/login?next=${encodeURIComponent(postPath)}`;
 
-  const handleDelete = () => {
-    if (!window.confirm('정말 삭제하시겠어요? 삭제 후에는 되돌릴 수 없습니다.')) return;
-    deletePost(post.id);
-    navigate('/');
+  useEffect(() => {
+    let mounted = true;
+    viewRequest.current ??= api<number>(`${postPath}/views`, { method: 'POST' });
+    void viewRequest.current.then((count) => { if (mounted) setViews(count); }).catch(() => {});
+    return () => { mounted = false; };
+  }, [postPath]);
+
+  const change = async (action: () => Promise<void>) => {
+    if (busy) return;
+    setError('');
+    setBusy(true);
+    try { await action(); }
+    catch (failure) { setError(errorMessage(failure)); }
+    finally { setBusy(false); }
   };
 
-  const handleGenerateSummary = async () => {
-    setSummaryStatus('loading');
-    try {
-      const result = await generateAiSummary(post.content);
-      setPostAiSummary(post.id, result);
-      setSummary(result);
-      setSummaryStatus('idle');
-    } catch {
-      setSummaryStatus('error');
-    }
+  const remove = () => {
+    if (!window.confirm('게시글을 삭제하시겠어요?')) return;
+    void change(async () => {
+      await api(postPath, { method: 'DELETE' });
+      navigate('/', { replace: true });
+    });
   };
 
-  const handleToggleLike = () => {
-    const updated = toggleLike(post.id);
-    if (updated) setLikeState({ likes: updated.likes, likedByMe: updated.likedByMe ?? false });
+  const toggleLike = () => {
+    if (!user.isLoggedIn) return navigate(loginPath);
+    void change(async () => {
+      setLike(await api<typeof like>(`${postPath}/like`, { method: like.likedByMe ? 'DELETE' : 'PUT' }));
+    });
   };
 
-  return (
-    <div>
-      <div style={{ ...cardStyle, boxShadow: shadow, marginBottom: '20px' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: '12px',
-            marginBottom: '12px',
-          }}
-        >
-          <div>
-            <span
-              style={{
-                fontSize: '12px',
-                fontWeight: 700,
-                color: colors.accent,
-                background: colors.accentBg,
-                border: `1px solid ${colors.accentBorder}`,
-                borderRadius: radius.pill,
-                padding: '2px 10px',
-              }}
-            >
-              {post.category}
-            </span>
-            <h1 style={{ fontSize: '24px', marginTop: '10px' }}>{post.title}</h1>
-          </div>
-
-          {isOwner && (
-            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-              <Link to={`/posts/${post.id}/edit`} style={{ ...secondaryButtonStyle, textDecoration: 'none' }}>
-                수정
-              </Link>
-              <button
-                type="button"
-                onClick={handleDelete}
-                style={{ ...secondaryButtonStyle, color: colors.danger, borderColor: colors.danger }}
-              >
-                삭제
-              </button>
-            </div>
-          )}
+  return <div>
+    <article style={{ ...cardStyle, boxShadow: shadow, marginBottom: 20 }}>
+      <div className="mvp-toolbar" style={{ justifyContent: 'space-between' }}>
+        <div>
+          <span style={{ color: colors.accent, fontWeight: 700 }}>{post.category}</span>
+          <h1 style={{ fontSize: 24, margin: '8px 0' }}>{post.title}</h1>
         </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: '14px',
-            fontSize: '13px',
-            color: colors.text,
-            paddingBottom: '16px',
-            borderBottom: `1px solid ${colors.borderSubtle}`,
-          }}
-        >
-          <span>{post.author}</span>
-          <span>{post.createdAt}</span>
-          <span>조회 {post.views.toLocaleString()}</span>
-          <span>추천 {likeState.likes}</span>
-          <span>댓글 {commentCount}</span>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleToggleLike}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            marginTop: '16px',
-            padding: '8px 16px',
-            borderRadius: radius.pill,
-            border: `1px solid ${likeState.likedByMe ? colors.accentBorder : colors.border}`,
-            background: likeState.likedByMe ? colors.accentBg : colors.bg,
-            color: likeState.likedByMe ? colors.accent : colors.text,
-            fontSize: '13px',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          {likeState.likedByMe ? '👍 추천 취소' : '👍 추천하기'} · {likeState.likes}
-        </button>
-
-        <div
-          style={{
-            marginTop: '20px',
-            padding: '16px',
-            borderRadius: radius.md,
-            border: `1px solid ${colors.accentBorder}`,
-            background: colors.accentBg,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: summaryStatus !== 'idle' || summary ? '10px' : 0,
-            }}
-          >
-            <h3 style={{ fontSize: '14px', color: colors.accent }}>✨ AI 요약</h3>
-            {summaryStatus !== 'loading' && (
-              <button
-                type="button"
-                onClick={handleGenerateSummary}
-                style={{ ...secondaryButtonStyle, fontSize: '12px', padding: '6px 12px' }}
-              >
-                {summary ? '다시 생성' : 'AI 요약 생성'}
-              </button>
-            )}
-          </div>
-
-          {summaryStatus === 'loading' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.text, fontSize: '13px' }}>
-                <Spinner size={16} />
-                AI가 게시글을 요약하고 있어요...
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <SkeletonLine />
-                <SkeletonLine width="85%" />
-                <SkeletonLine width="60%" />
-              </div>
-            </div>
-          )}
-
-          {summaryStatus === 'error' && (
-            <p style={{ color: colors.danger, fontSize: '13px' }}>
-              요약 생성에 실패했습니다. 위 버튼을 눌러 다시 시도해주세요.
-            </p>
-          )}
-
-          {summaryStatus === 'idle' && summary && (
-            <p style={{ color: colors.textHeading, fontSize: '14px', lineHeight: 1.6 }}>{summary}</p>
-          )}
-
-          {summaryStatus === 'idle' && !summary && (
-            <p style={{ color: colors.text, fontSize: '13px' }}>
-              아직 생성된 요약이 없어요. 버튼을 눌러 AI 요약을 생성해보세요.
-            </p>
-          )}
-        </div>
-
-        <div style={{ paddingTop: '20px' }}>
-          <MarkdownContent content={post.content} />
-        </div>
+        {post.authorId === user.userId && <div className="mvp-toolbar">
+          <Link to={`${postPath}/edit`} style={secondaryButtonStyle}>수정</Link>
+          <button type="button" onClick={remove} disabled={busy} style={secondaryButtonStyle}>삭제</button>
+        </div>}
       </div>
-
-      <div style={{ ...cardStyle, marginBottom: '20px' }}>
-        <CommentSection postId={post.id} onCountChange={setCommentCount} />
+      <p className="mvp-toolbar" style={{ color: colors.text, fontSize: 13, marginBottom: 16 }}>
+        <span>{post.author}</span><time dateTime={post.createdAt}>{dateTime(post.createdAt)}</time>
+        <span>조회 {views}</span><span>추천 {like.likes}</span><span>댓글 {commentCount}</span>
+      </p>
+      <div className="mvp-toolbar">
+        <button type="button" aria-pressed={like.likedByMe} disabled={busy} onClick={toggleLike}
+          style={secondaryButtonStyle}>{like.likedByMe ? '추천 취소' : '추천하기'}</button>
+        <button type="button" aria-expanded={showExcerpt} onClick={() => setShowExcerpt(!showExcerpt)}
+          style={secondaryButtonStyle}>{showExcerpt ? '발췌 접기' : '본문 발췌'}</button>
       </div>
-
-      <Link to="/" style={{ color: colors.accent, fontSize: '14px', textDecoration: 'none' }}>
-        ← 목록으로
-      </Link>
+      {error && <p role="alert" style={{ color: colors.danger }}>{error}</p>}
+      {showExcerpt && <p style={{ marginTop: 16 }}>{getExcerpt(post.content, 260) || '본문에 발췌할 텍스트가 없습니다.'}</p>}
+      <div style={{ paddingTop: 20 }}><MarkdownContent content={post.content} /></div>
+    </article>
+    <div style={{ ...cardStyle, marginBottom: 20 }}>
+      <CommentSection postId={post.id} initialCount={post.comments} onCountChange={setCommentCount} />
     </div>
-  );
-};
+    <Link to="/">← 목록으로</Link>
+  </div>;
+}
