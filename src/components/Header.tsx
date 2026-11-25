@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { colors, badgeStyle } from '../styles/theme';
+import { errorMessage } from '../api';
+import { colors } from '../styles/theme';
+import { useAuth } from '../context/useAuth';
 
 type NavItem = {
   label: string;
@@ -12,21 +15,28 @@ const NAV_ITEMS: NavItem[] = [
   { label: '프로필', to: '/profile' },
 ];
 
-// Mock: 백엔드 연동 전이므로 비로그인(GUEST) 상태를 고정값으로 표시
-const isLoggedIn = false;
-const mockUser = { nickname: '리뷰미', role: 'USER' as const };
-
 export const Header = () => {
-  const role: 'GUEST' | 'USER' = isLoggedIn ? mockUser.role : 'GUEST';
+  const { user, logout, ready } = useAuth();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const signOut = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try { await logout(); }
+    catch (failure) { setError(errorMessage(failure)); }
+    finally { setBusy(false); }
+  };
 
   return (
-    <header
+    <header className="mvp-header"
       style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 24px',
-        height: '60px',
+        minHeight: '60px',
         borderBottom: `1px solid ${colors.border}`,
         background: colors.bg,
         position: 'sticky',
@@ -34,7 +44,7 @@ export const Header = () => {
         zIndex: 10,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+      <div className="mvp-toolbar mvp-header-brand">
         <Link
           to="/"
           style={{
@@ -45,9 +55,9 @@ export const Header = () => {
             letterSpacing: '-0.02em',
           }}
         >
-          INDEX
+          REVIEWME
         </Link>
-        <nav style={{ display: 'flex', gap: '20px' }}>
+        <nav className="mvp-toolbar" aria-label="주 메뉴">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
@@ -66,12 +76,27 @@ export const Header = () => {
         </nav>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span style={badgeStyle(role === 'USER' ? 'user' : 'guest')}>{role}</span>
-        {isLoggedIn ? (
-          <span style={{ fontSize: '14px', color: colors.textHeading, fontWeight: 600 }}>
-            {mockUser.nickname}
-          </span>
+      <div className="mvp-toolbar">
+        {error && <span role="alert" style={{ color: colors.danger }}>{error}</span>}
+        {ready && (user.isLoggedIn ? (
+          <>
+            <span style={{ fontSize: '14px', color: colors.textHeading, fontWeight: 600 }}>{user.nickname}</span>
+            <button
+              type="button"
+              onClick={signOut}
+              disabled={busy}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '13px',
+                color: colors.text,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              로그아웃
+            </button>
+          </>
         ) : (
           <>
             <Link
@@ -95,7 +120,7 @@ export const Header = () => {
               회원가입
             </Link>
           </>
-        )}
+        ))}
       </div>
     </header>
   );
